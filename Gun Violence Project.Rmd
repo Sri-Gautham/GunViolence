@@ -1,0 +1,156 @@
+---
+title: "Gun Violence in America"
+author: "Sri Gautham Subramani"
+output: 
+  revealjs::revealjs_presentation:
+    theme: league
+---
+
+```{r include = FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(viridis)
+library(shiny)
+library(revealjs)
+library(leaflet)
+library(ggmap)
+library(htmltools)
+library(date)
+library(lubridate)
+library(htmlwidgets)
+library(tidyverse)
+library(choroplethr)
+library(choroplethrMaps)
+library(repmis)
+library(ggthemes)
+library(sp)
+library(base)
+library(jpeg)
+library(openintro)
+library(rgdal)
+library(raster)
+library(mapview)
+```
+
+##Objective
+
+>- The Objective of this topic is to discuss the severity of Gun Violence in America
+>- To address the Statistics behind major shootings
+>- To render the results visually with the help of R
+
+## Data Sources
+
+>- [Gun violence database](https://www.kaggle.com/gunviolencearchive/gun-violence-database/data) : Discussing incidents of gun violence from 2014-2016.
+>- [World firearms murders and ownership](https://docs.google.com/spreadsheets/d/1chqUZHuY6cXYrRYkuE0uwXisGaYvr7durZHJhpLGycs/edit#gid=0) : Discussing the total number of population of gun owners in each country
+>- [Stanford Data](https://raw.githubusercontent.com/StanfordGeospatialCenter/MSA/master/Data/Stanford_MSA_Database.csv?raw=True) : Discussing some of the important shootings from 1966-2013
+
+##Setting up the Data
+
+>- Gun Violence Data was not readily available.The main website [Gun Violence Archive](http://www.gunviolencearchive.org/) although is open to everyone to view the data, downloads are restricted only to the first 500 entries.
+>- The other difficulties was to combine the yearwise data to one complete dataset.
+>- To format the date and extract the Year to perform Statistical Analysis.
+>- Some unique datasets were taken from multiple websites through **Web Scraping**
+
+##Initial Analysis
+
+
+
+```{r loadData, echo=FALSE, warning=FALSE, message=FALSE}
+ mass_shootings_2014 <- source_data("https://github.com/DataWrangling957/HomeworkData/blob/master/Final%20Project/mass_shootings_2014.csv?raw=True")
+ mass_shootings_2015 <- source_data("https://github.com/DataWrangling957/HomeworkData/blob/master/Final%20Project/mass_shootings_2015.csv?raw=True")
+ mass_shootings_2016 <- source_data("https://github.com/DataWrangling957/HomeworkData/blob/master/Final%20Project/mass_shootings_2016.csv?raw=True")
+ stanford_data <- source_data("https://raw.githubusercontent.com/StanfordGeospatialCenter/MSA/master/Data/Stanford_MSA_Database.csv?raw=True")
+ full_data <- source_data("https://github.com/DataWrangling957/HomeworkData/blob/master/Final%20Project/full_data.csv?raw=True")
+ world_data <- source_data("https://raw.githubusercontent.com/DataWrangling957/HomeworkData/master/Final%20Project/World%20firearms%20murders%20and%20ownership%20-%20Sheet%201.csv?raw=True")
+ mass_shootings <- rbind(mass_shootings_2014, mass_shootings_2015, mass_shootings_2016)
+```
+
+```{r echo=TRUE, include=TRUE, warning=FALSE, message=FALSE}
+mass_shootings$Incident.Date <- mdy(mass_shootings$`Incident Date`)
+mass_shootings <- mass_shootings %>% mutate(Year = substring(.$Incident.Date,1,4))
+mass_shootings$State <- casefold(mass_shootings$State, upper = FALSE)
+state_demographics <- mass_shootings %>% group_by(State) %>% summarise(n = sum(`# Killed`)) %>% ungroup()
+state_demographics %>% arrange(-n)
+```
+
+## State Choroplethr
+
+```{r, warning=FALSE}
+state_demographics %>% 
+  dplyr::rename(region = State, value = n) %>%
+  state_choropleth(title = "Number of Mass Shootings", num_colors = 1)
+```
+
+## Examining Stanford Data
+
+```{r, warning=FALSE}
+stanford_data$Date <- mdy(stanford_data$Date)
+stanford_data <- stanford_data %>% mutate(Year = substring(.$Date,1,4))
+
+stanford_demographics <- 
+  stanford_data %>% group_by(State) %>% summarise(n = sum(`Total Number of Victims`)) %>% ungroup() %>% arrange(-n)
+stanford_demographics$State <- casefold(stanford_demographics$State, upper = FALSE)
+stanford_demographics %>% 
+  dplyr::rename(region = State, value = n) %>%
+  state_choropleth(title = "Number of Shootings", num_colors = 1)
+```
+
+## Gun Violence by Year of Stanford Data
+
+```{r, echo=TRUE, warning=FALSE}
+stanford_data %>% group_by(Year) %>% summarise(n = sum(`Total Number of Victims`)) %>% ungroup() %>% ggplot(mapping = aes(Year,n,color = Year,fill = Year)) + 
+  geom_bar(stat = "identity") + theme_calc() + scale_fill_discrete(na.value = "some colour other than grey")
+```
+
+## Gun Violence by Place Type
+
+```{r, echo=TRUE, warning=FALSE}
+stanford_data %>% group_by(`Place Type`) %>% summarise(n = sum(`Total Number of Victims`)) %>% ungroup() %>% arrange(-n)
+```
+
+## Gun Violence by Age
+
+```{r, echo=TRUE, warning=FALSE}
+stanford_data %>% group_by(`Shooter Age(s)`) %>% summarise(n = sum(`Total Number of Victims`)) %>% ungroup() %>% arrange(-n)
+```
+
+## Gun Violence Based on Intent
+
+```{r, echo=TRUE, warning=FALSE}
+full_data_updated <- mutate(full_data, Count = rep(1,nrow(full_data)))
+deaths_data <- full_data_updated %>% group_by(intent) %>% summarise(n = sum(Count)) %>%  ungroup() %>% arrange(-n)
+deaths_data %>% na.omit()
+```
+
+## Gun Deaths based on Ethinicity
+
+```{r, echo=TRUE, warning=FALSE}
+stanford_data %>% group_by(`Shooter Race`) %>% summarise(n = sum(`Total Number of Victims`)) %>% ungroup() %>% arrange(-n)
+```
+
+##Analysis of Global Gun Owners
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+df_country <- world_data[,c(1,9)]
+names(df_country) <- c("region","value")
+df_country$region <- casefold(df_country$region , upper = FALSE)
+df_country$region[176] <- c("united states of america")
+df_country$region[39] <- c("republic of congo")
+df_country$region[53] <- c("united kingdom")
+df_country$region[44] <- c("northern cyprus")
+df_country$region[166] <- c("united republic of tanzania")
+df_country$region[89] <- c("north korea")
+df_country$region[90] <- c("south korea")
+df_country$region[147] <- c("republic of serbia")
+df_country$region[39] <- c("democratic republic of the congo")
+```
+
+```{r, echo=TRUE, warning=FALSE}
+country_choropleth(df_country)
+world_data <- as.data.frame(world_data)
+```
+
+##Population of Gun Owners
+```{r, echo=FALSE, warning=FALSE}
+highest_firearms <- world_data %>% group_by(`Country/Territory`) %>% summarise(Total = sum(`Average total all civilian firearms`)) %>% ungroup() %>% arrange(-Total) %>% head(n=10)
+
+ggplot(data = highest_firearms, mapping = aes(highest_firearms$`Country/Territory`, Total, colour = highest_firearms$`Country/Territory`, size = highest_firearms$Total)) + geom_point()
+```
